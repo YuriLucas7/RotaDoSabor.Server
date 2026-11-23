@@ -12,12 +12,17 @@ public class ClienteService(ClienteRepository repository) : BaseService
     public async Task<Guid> Cadastrar(ClienteCadastroRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Nome)) AddError(nameof(request.Nome), "Informe o nome.");
+
         if (!RuleValidation.EmailValido(request.Email)) AddError(nameof(request.Email), "Informe um e-mail válido.");
+
         if (!RuleValidation.TelefoneValido(request.Telefone)) AddError(nameof(request.Telefone), "Informe um telefone válido.");
+
         if (string.IsNullOrWhiteSpace(request.Senha) || request.Senha.Length < 8)
             AddError(nameof(request.Senha), "A senha deve possuir pelo menos 8 caracteres.");
+
         if (!Errors.Any() && await repository.EmailOuTelefoneExiste(request.Email, request.Telefone))
             AddError(nameof(request.Email), "E-mail ou telefone já cadastrado.");
+
         ThrowIfInvalid();
 
         var cliente = new Cliente { Nome=request.Nome.Trim(), Email=request.Email.Trim(), Telefone=request.Telefone.Trim() };
@@ -29,9 +34,13 @@ public class ClienteService(ClienteRepository repository) : BaseService
     {
         var cliente = await repository.ObterPorLogin(request.EmailOuTelefone)
             ?? throw new InvalidOperationException("E-mail/telefone ou senha inválidos.");
+
         if (!cliente.Ativo) throw new InvalidOperationException("Conta desativada.");
+
         var result = _passwordHasher.VerifyHashedPassword(cliente, cliente.SenhaHash, request.Senha);
+
         if (result == PasswordVerificationResult.Failed) throw new InvalidOperationException("E-mail/telefone ou senha inválidos.");
+
         return tokenService.Gerar(cliente);
     }
 
