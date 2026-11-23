@@ -1,4 +1,4 @@
--- docker run --name rota-do-sabor-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=rota_do_sabor -p 5432:5432 -d postgres:17
+-- docker run --name rota-do-sabor-postgres --env-file .env -p 5432:5432 -d postgres:17
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE SCHEMA IF NOT EXISTS rota_sabor;

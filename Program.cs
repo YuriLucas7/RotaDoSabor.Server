@@ -8,6 +8,8 @@ using RotaDoSabor.Server.Validations;
 using System.Text;
 using System.Text.Json.Serialization;
 
+LoadEnvironmentVariables();
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -17,9 +19,12 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+string connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("A conexão com o banco de dados não foi configurada no arquivo .env.");
+
 // Configuração da conexão com o banco de dados
 builder.Services.AddScoped<System.Data.IDbConnection>(_ =>
-    new Npgsql.NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
+    new Npgsql.NpgsqlConnection(connectionString));
 
 // Registro dos repositórios
 builder.Services.AddScoped<ClienteRepository>();
@@ -38,8 +43,13 @@ builder.Services.AddScoped<ProdutoService>();
 builder.Services.AddScoped<PedidoService>();
 builder.Services.AddScoped<AvaliacaoService>();
 
-var jwtKey = builder.Configuration["Jwt:Key"]
-    ?? throw new InvalidOperationException("A chave JWT não foi configurada.");
+string jwtIssuer = builder.Configuration["Jwt:Issuer"]
+    ?? throw new InvalidOperationException("O emissor JWT não foi configurado no arquivo .env.");
+string jwtAudience = builder.Configuration["Jwt:Audience"]
+    ?? throw new InvalidOperationException("A audiência JWT não foi configurada no arquivo .env.");
+string jwtKey = builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("A chave JWT não foi configurada no arquivo .env.");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -49,8 +59,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.FromMinutes(1)
         };
@@ -100,3 +110,30 @@ app.MapPedidoEndpoints();
 app.MapAvaliacaoEndpoints();
 
 app.Run();
+
+static void LoadEnvironmentVariables()
+{
+    string envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+
+    if (!File.Exists(envPath))
+        return;
+
+    foreach (string line in File.ReadAllLines(envPath))
+    {
+        string content = line.Trim();
+
+        if (string.IsNullOrWhiteSpace(content) || content.StartsWith('#'))
+            continue;
+
+        int separatorIndex = content.IndexOf('=');
+
+        if (separatorIndex <= 0)
+            continue;
+
+        string key = content[..separatorIndex].Trim();
+        string value = content[(separatorIndex + 1)..].Trim().Trim('"', '\'');
+
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
+            Environment.SetEnvironmentVariable(key, value);
+    }
+}
