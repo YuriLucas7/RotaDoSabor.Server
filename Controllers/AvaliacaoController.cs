@@ -1,16 +1,19 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class AvaliacaoController
 {
     public static void MapAvaliacaoEndpoints(this WebApplication app)
     {
-        app.MapPost("v1/pedidos/{pedidoId:guid}/avaliacao", async (Guid pedidoId, AvaliacaoRequest request, AvaliacaoService service) =>
+        app.MapPost("v1/pedidos/{pedidoId:guid}/avaliacao", async (Guid pedidoId, Avaliacao avaliacao, AvaliacaoService service) =>
         {
-            var id = await service.Cadastrar(pedidoId, request);
-            return Results.Created($"/v1/avaliacoes/{id}", new { avaliacaoId = id });
-        }).WithTags("avaliações").WithSummary("Avalia restaurante, entrega e comida");
+            Guid avaliacaoId = await service.CadastrarAvaliacao(avaliacao, pedidoId);
+            return Results.Created($"/v1/avaliacoes/{avaliacaoId}", "Avaliação cadastrada com sucesso.");
+        })
+        .WithTags("avaliações")
+        .WithSummary("Registra a avaliação do pedido")
+        .Produces(StatusCodes.Status201Created);
     }
 }

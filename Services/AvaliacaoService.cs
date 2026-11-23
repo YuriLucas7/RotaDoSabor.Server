@@ -1,20 +1,67 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Repositories;
+using RotaDoSabor.Models;
+using RotaDoSabor.Repositories;
+using RotaDoSabor.Server.Services;
 using RotaDoSabor.Server.Validations;
 
-namespace RotaDoSabor.Server.Services;
+namespace RotaDoSabor.Services;
 
-public class AvaliacaoService(AvaliacaoRepository repository, PedidoRepository pedidoRepository) : BaseService
+public class AvaliacaoService : BaseService
 {
-    public async Task<Guid> Cadastrar(Guid pedidoId, AvaliacaoRequest request)
+    private readonly AvaliacaoRepository _repository;
+    private readonly PedidoRepository _pedidoRepository;
+
+    public AvaliacaoService(AvaliacaoRepository repository, PedidoRepository pedidoRepository)
     {
-        var pedido = await pedidoRepository.Obter(pedidoId) ?? throw new NotFoundException("Pedido não encontrado.");
-        if (pedido.Status != StatusPedido.Entregue) throw new InvalidOperationException("Somente pedidos entregues podem ser avaliados.");
-        if (await repository.PedidoAvaliado(pedidoId)) throw new ConflictException("Este pedido já foi avaliado.");
-        if (request.NotaRestaurante is < 1 or > 5) AddError(nameof(request.NotaRestaurante), "A nota deve estar entre 1 e 5.");
-        if (request.NotaEntrega is < 1 or > 5) AddError(nameof(request.NotaEntrega), "A nota deve estar entre 1 e 5.");
-        if (request.NotaComida is < 1 or > 5) AddError(nameof(request.NotaComida), "A nota deve estar entre 1 e 5.");
-        ThrowIfInvalid();
-        return await repository.Cadastrar(pedido, request);
+        _repository = repository;
+        _pedidoRepository = pedidoRepository;
+    }
+
+    public async Task<Guid> CadastrarAvaliacao(Avaliacao avaliacao, Guid pedidoId)
+    {
+        try
+        {
+            var pedido = await _pedidoRepository.ObterPedido(pedidoId)
+                ?? throw new NotFoundException("Pedido não encontrado para o ID informado.");
+
+            if (pedido.Status != StatusPedido.Entregue)
+                throw new InvalidOperationException("Somente pedidos entregues podem ser avaliados.");
+
+            if (await _repository.VerificarPedidoAvaliado(pedidoId))
+                throw new ConflictException("Este pedido já foi avaliado.");
+
+            ValidarAvaliacao(avaliacao);
+
+            return await _repository.CadastrarAvaliacao(pedido, avaliacao);
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (ValidationException)
+        {
+            throw;
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (ConflictException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao cadastrar avaliação: {ex.Message}");
+        }
+    }
+
+    private void ValidarAvaliacao(Avaliacao avaliacao)
+    {
+        if (avaliacao.NotaRestaurante is < 1 or > 5) AddError(nameof(avaliacao.NotaRestaurante), "A nota deve estar entre 1 e 5.");
+        if (avaliacao.NotaEntrega is < 1 or > 5) AddError(nameof(avaliacao.NotaEntrega), "A nota deve estar entre 1 e 5.");
+        if (avaliacao.NotaComida is < 1 or > 5) AddError(nameof(avaliacao.NotaComida), "A nota deve estar entre 1 e 5.");
+
+        if (Errors.Any())
+            throw new ValidationException(Errors);
     }
 }

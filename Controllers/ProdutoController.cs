@@ -1,32 +1,46 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class ProdutoController
 {
     public static void MapProdutoEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("v1").WithTags("cardápio e produtos");
-
-        group.MapPost("/restaurantes/{restauranteId:guid}/produtos", async (Guid restauranteId, ProdutoRequest request, ProdutoService service) =>
+        app.MapPost("v1/restaurantes/{restauranteId:guid}/produtos", async (Guid restauranteId, Produto produto, ProdutoService service) =>
         {
-            var id = await service.Cadastrar(restauranteId, request);
-            return Results.Created($"/v1/produtos/{id}", new { produtoId = id });
-        }).WithSummary("Cadastra um produto no cardápio");
+            Guid produtoId = await service.CadastrarProduto(produto, restauranteId);
+            return Results.Created($"/v1/produtos/{produtoId}", "Produto cadastrado com sucesso.");
+        })
+        .WithTags("produtos")
+        .WithSummary("Registra um produto")
+        .Produces(StatusCodes.Status201Created);
 
-        group.MapGet("/restaurantes/{restauranteId:guid}/produtos", async (Guid restauranteId, bool somenteDisponiveis, ProdutoService service) =>
-            Results.Ok(await service.ObterPorRestaurante(restauranteId, somenteDisponiveis)))
-            .WithSummary("Lista o cardápio do restaurante").Produces<List<Produto>>();
-
-        group.MapGet("/produtos/{produtoId:guid}", async (Guid produtoId, ProdutoService service) =>
-            Results.Ok(await service.Obter(produtoId)))
-            .WithSummary("Retorna o produto").Produces<Produto>();
-
-        group.MapPut("/produtos/{produtoId:guid}", async (Guid produtoId, ProdutoRequest request, ProdutoService service) =>
+        app.MapGet("v1/restaurantes/{restauranteId:guid}/produtos", async (Guid restauranteId, bool somenteDisponiveis, ProdutoService service) =>
         {
-            await service.Atualizar(produtoId, request);
-            return Results.NoContent();
-        }).WithSummary("Atualiza produto, preço e disponibilidade");
+            var result = await service.ObterProdutosPorRestaurante(restauranteId, somenteDisponiveis);
+            return Results.Ok(result);
+        })
+        .WithTags("produtos")
+        .WithSummary("Retorna o cardápio do restaurante")
+        .Produces<List<Produto>>(StatusCodes.Status200OK);
+
+        app.MapGet("v1/produtos/{produtoId:guid}", async (Guid produtoId, ProdutoService service) =>
+        {
+            var result = await service.ObterProduto(produtoId);
+            return Results.Ok(result);
+        })
+        .WithTags("produtos")
+        .WithSummary("Retorna um produto por ID")
+        .Produces<Produto>(StatusCodes.Status200OK);
+
+        app.MapPut("v1/produtos/{produtoId:guid}", async (Guid produtoId, Produto produto, ProdutoService service) =>
+        {
+            await service.AtualizarProduto(produto, produtoId);
+            return Results.Ok("Produto atualizado com sucesso.");
+        })
+        .WithTags("produtos")
+        .WithSummary("Atualiza um produto")
+        .Produces(StatusCodes.Status200OK);
     }
 }

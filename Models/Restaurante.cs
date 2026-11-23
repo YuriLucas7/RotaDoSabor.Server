@@ -1,4 +1,4 @@
-namespace RotaDoSabor.Server.Models;
+namespace RotaDoSabor.Models;
 
 public class Restaurante
 {
@@ -20,15 +20,3 @@ public class Restaurante
     public bool PossuiOferta { get; set; }
 }
 
-public record RestauranteRequest(
-    string Nome,
-    string Descricao,
-    string Cnpj,
-    string Telefone,
-    string Email,
-    string? ImagemUrl,
-    string Categoria,
-    decimal PedidoMinimo,
-    decimal TaxaEntrega,
-    int TempoEntregaMinimo,
-    int TempoEntregaMaximo);

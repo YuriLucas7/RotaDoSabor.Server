@@ -1,85 +1,219 @@
 using Npgsql;
-using RotaDoSabor.Server.Models;
+using RotaDoSabor.Models;
 using System.Data;
 
-namespace RotaDoSabor.Server.Repositories;
+namespace RotaDoSabor.Repositories;
 
-public class EnderecoRepository : BaseRepository
+public class EnderecoRepository
 {
-    public EnderecoRepository(IDbConnection connection) : base(connection) { }
+    private readonly NpgsqlConnection _connection;
 
-    public async Task<Guid> Cadastrar(Guid clienteId, EnderecoRequest request)
+    public EnderecoRepository(IDbConnection connection)
     {
-        const string sql = """
+        _connection = (NpgsqlConnection)connection ?? throw new ArgumentNullException(nameof(connection));
+    }
+
+    public async Task<Guid> CadastrarEndereco(Endereco endereco)
+    {
+        const string sql = @"
             INSERT INTO rota_sabor.endereco
-            (cliente_id, apelido, cep, logradouro, numero, complemento, bairro, cidade, estado, latitude, longitude, principal)
-            VALUES (@cliente_id, @apelido, @cep, @logradouro, @numero, @complemento, @bairro, @cidade, @estado, @latitude, @longitude, @principal)
+            (
+                cliente_id,
+                apelido,
+                cep,
+                logradouro,
+                numero,
+                complemento,
+                bairro,
+                cidade,
+                estado,
+                latitude,
+                longitude,
+                principal
+            )
+            VALUES
+            (
+                @cliente_id,
+                @apelido,
+                @cep,
+                @logradouro,
+                @numero,
+                @complemento,
+                @bairro,
+                @cidade,
+                @estado,
+                @latitude,
+                @longitude,
+                @principal
+            )
             RETURNING endereco_id;
-            """;
-        await EnsureOpenAsync();
-        if (request.Principal)
+        ";
+
+        try
         {
-            await using var clear = new NpgsqlCommand("UPDATE rota_sabor.endereco SET principal=false WHERE cliente_id=@cliente_id", Connection);
-            clear.Parameters.AddWithValue("cliente_id", clienteId);
-            await clear.ExecuteNonQueryAsync();
+            await EnsureOpenAsync();
+
+            if (endereco.Principal)
+            {
+                const string limparPrincipalSql = @"
+                    UPDATE rota_sabor.endereco
+                       SET principal = false
+                     WHERE cliente_id = @cliente_id;
+                ";
+
+                await using var limparPrincipal = new NpgsqlCommand(limparPrincipalSql, _connection);
+                limparPrincipal.Parameters.AddWithValue("cliente_id", endereco.ClienteId);
+                await limparPrincipal.ExecuteNonQueryAsync();
+            }
+
+            await using var command = new NpgsqlCommand(sql, _connection);
+            AdicionarParametros(command, endereco);
+
+            return (Guid)(await command.ExecuteScalarAsync())!;
         }
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        AddParameters(cmd, clienteId, request);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<List<Endereco>> ObterPorCliente(Guid clienteId)
+    public async Task<List<Endereco>> ObterEnderecosPorCliente(Guid clienteId)
     {
-        const string sql = "SELECT * FROM rota_sabor.endereco WHERE cliente_id=@cliente_id ORDER BY principal DESC, apelido;";
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("cliente_id", clienteId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var result = new List<Endereco>();
-        while (await reader.ReadAsync()) result.Add(Map(reader));
-        return result;
+        const string sql = @"
+            SELECT endereco_id,
+                   cliente_id,
+                   apelido,
+                   cep,
+                   logradouro,
+                   numero,
+                   complemento,
+                   bairro,
+                   cidade,
+                   estado,
+                   latitude,
+                   longitude,
+                   principal
+              FROM rota_sabor.endereco
+             WHERE cliente_id = @cliente_id
+             ORDER BY principal DESC,
+                      apelido;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            command.Parameters.AddWithValue("cliente_id", clienteId);
+            await using var reader = await command.ExecuteReaderAsync();
+            var enderecos = new List<Endereco>();
+
+            while (await reader.ReadAsync())
+                enderecos.Add(MapearEndereco(reader));
+
+            return enderecos;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<Endereco?> Obter(Guid enderecoId)
+    public async Task<Endereco?> ObterEndereco(Guid enderecoId)
     {
-        const string sql = "SELECT * FROM rota_sabor.endereco WHERE endereco_id=@id LIMIT 1;";
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("id", enderecoId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? Map(reader) : null;
+        const string sql = @"
+            SELECT endereco_id,
+                   cliente_id,
+                   apelido,
+                   cep,
+                   logradouro,
+                   numero,
+                   complemento,
+                   bairro,
+                   cidade,
+                   estado,
+                   latitude,
+                   longitude,
+                   principal
+              FROM rota_sabor.endereco
+             WHERE endereco_id = @endereco_id
+             LIMIT 1;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            command.Parameters.AddWithValue("endereco_id", enderecoId);
+            await using var reader = await command.ExecuteReaderAsync();
+
+            return await reader.ReadAsync() ? MapearEndereco(reader) : null;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<int> Excluir(Guid enderecoId)
+    public async Task<int> ExcluirEndereco(Guid enderecoId)
     {
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand("DELETE FROM rota_sabor.endereco WHERE endereco_id=@id", Connection);
-        cmd.Parameters.AddWithValue("id", enderecoId);
-        return await cmd.ExecuteNonQueryAsync();
+        const string sql = @"
+            DELETE FROM rota_sabor.endereco
+                  WHERE endereco_id = @endereco_id;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            command.Parameters.AddWithValue("endereco_id", enderecoId);
+
+            return await command.ExecuteNonQueryAsync();
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    private static void AddParameters(NpgsqlCommand cmd, Guid clienteId, EnderecoRequest r)
+    private static void AdicionarParametros(NpgsqlCommand command, Endereco endereco)
     {
-        cmd.Parameters.AddWithValue("cliente_id", clienteId);
-        cmd.Parameters.AddWithValue("apelido", r.Apelido);
-        cmd.Parameters.AddWithValue("cep", r.Cep);
-        cmd.Parameters.AddWithValue("logradouro", r.Logradouro);
-        cmd.Parameters.AddWithValue("numero", r.Numero);
-        cmd.Parameters.AddWithValue("complemento", r.Complemento ?? string.Empty);
-        cmd.Parameters.AddWithValue("bairro", r.Bairro);
-        cmd.Parameters.AddWithValue("cidade", r.Cidade);
-        cmd.Parameters.AddWithValue("estado", r.Estado);
-        cmd.Parameters.AddWithValue("latitude", (object?)r.Latitude ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("longitude", (object?)r.Longitude ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("principal", r.Principal);
+        command.Parameters.AddWithValue("cliente_id", endereco.ClienteId);
+        command.Parameters.AddWithValue("apelido", endereco.Apelido);
+        command.Parameters.AddWithValue("cep", endereco.Cep);
+        command.Parameters.AddWithValue("logradouro", endereco.Logradouro);
+        command.Parameters.AddWithValue("numero", endereco.Numero);
+        command.Parameters.AddWithValue("complemento", endereco.Complemento);
+        command.Parameters.AddWithValue("bairro", endereco.Bairro);
+        command.Parameters.AddWithValue("cidade", endereco.Cidade);
+        command.Parameters.AddWithValue("estado", endereco.Estado);
+        command.Parameters.AddWithValue("latitude", (object?)endereco.Latitude ?? DBNull.Value);
+        command.Parameters.AddWithValue("longitude", (object?)endereco.Longitude ?? DBNull.Value);
+        command.Parameters.AddWithValue("principal", endereco.Principal);
     }
 
-    private static Endereco Map(NpgsqlDataReader reader) => new()
+    private static Endereco MapearEndereco(NpgsqlDataReader reader)
     {
-        EnderecoId = reader.GetGuid("endereco_id"), ClienteId = reader.GetGuid("cliente_id"),
-        Apelido = reader.GetString("apelido"), Cep = reader.GetString("cep"), Logradouro = reader.GetString("logradouro"),
-        Numero = reader.GetString("numero"), Complemento = reader.GetSafeString("complemento"), Bairro = reader.GetString("bairro"),
-        Cidade = reader.GetString("cidade"), Estado = reader.GetString("estado"), Latitude = reader.GetNullableDecimal("latitude"),
-        Longitude = reader.GetNullableDecimal("longitude"), Principal = reader.GetBoolean("principal")
-    };
+        return new Endereco
+        {
+            EnderecoId = reader.GetGuid("endereco_id"),
+            ClienteId = reader.GetGuid("cliente_id"),
+            Apelido = reader.GetString("apelido"),
+            Cep = reader.GetString("cep"),
+            Logradouro = reader.GetString("logradouro"),
+            Numero = reader.GetString("numero"),
+            Complemento = reader.GetSafeString("complemento"),
+            Bairro = reader.GetString("bairro"),
+            Cidade = reader.GetString("cidade"),
+            Estado = reader.GetString("estado"),
+            Latitude = reader.GetNullableDecimal("latitude"),
+            Longitude = reader.GetNullableDecimal("longitude"),
+            Principal = reader.GetBoolean("principal")
+        };
+    }
+
+    private async Task EnsureOpenAsync()
+    {
+        if (_connection.State != ConnectionState.Open)
+            await _connection.OpenAsync();
+    }
 }

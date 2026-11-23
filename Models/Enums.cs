@@ -1,4 +1,4 @@
-namespace RotaDoSabor.Server.Models;
+namespace RotaDoSabor.Models;
 
 public enum PerfilUsuario
 {

@@ -1,62 +1,154 @@
 using Microsoft.AspNetCore.Identity;
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Repositories;
+using RotaDoSabor.Models;
+using RotaDoSabor.Repositories;
+using RotaDoSabor.Server.Services;
 using RotaDoSabor.Server.Validations;
 
-namespace RotaDoSabor.Server.Services;
+namespace RotaDoSabor.Services;
 
-public class ClienteService(ClienteRepository repository) : BaseService
+public class ClienteService : BaseService
 {
+    private readonly ClienteRepository _repository;
     private readonly PasswordHasher<Cliente> _passwordHasher = new();
 
-    public async Task<Guid> Cadastrar(ClienteCadastroRequest request)
+    public ClienteService(ClienteRepository repository)
     {
-        if (string.IsNullOrWhiteSpace(request.Nome)) AddError(nameof(request.Nome), "Informe o nome.");
-
-        if (!RuleValidation.EmailValido(request.Email)) AddError(nameof(request.Email), "Informe um e-mail válido.");
-
-        if (!RuleValidation.TelefoneValido(request.Telefone)) AddError(nameof(request.Telefone), "Informe um telefone válido.");
-
-        if (string.IsNullOrWhiteSpace(request.Senha) || request.Senha.Length < 8)
-            AddError(nameof(request.Senha), "A senha deve possuir pelo menos 8 caracteres.");
-
-        if (!Errors.Any() && await repository.EmailOuTelefoneExiste(request.Email, request.Telefone))
-            AddError(nameof(request.Email), "E-mail ou telefone já cadastrado.");
-
-        ThrowIfInvalid();
-
-        var cliente = new Cliente { Nome=request.Nome.Trim(), Email=request.Email.Trim(), Telefone=request.Telefone.Trim() };
-        cliente.SenhaHash = _passwordHasher.HashPassword(cliente, request.Senha);
-        return await repository.Cadastrar(cliente);
+        _repository = repository;
     }
 
-    public async Task<LoginResponse> Login(LoginRequest request, TokenService tokenService)
+    public async Task<Guid> CadastrarCliente(ClienteCadastro cliente)
     {
-        var cliente = await repository.ObterPorLogin(request.EmailOuTelefone)
-            ?? throw new InvalidOperationException("E-mail/telefone ou senha inválidos.");
+        try
+        {
+            await ValidarCliente(cliente);
+            cliente.Nome = cliente.Nome.Trim();
+            cliente.Email = cliente.Email.Trim();
+            cliente.Telefone = cliente.Telefone.Trim();
+            cliente.SenhaHash = _passwordHasher.HashPassword(cliente, cliente.Senha);
 
-        if (!cliente.Ativo) throw new InvalidOperationException("Conta desativada.");
-
-        var result = _passwordHasher.VerifyHashedPassword(cliente, cliente.SenhaHash, request.Senha);
-
-        if (result == PasswordVerificationResult.Failed) throw new InvalidOperationException("E-mail/telefone ou senha inválidos.");
-
-        return tokenService.Gerar(cliente);
+            return await _repository.CadastrarCliente(cliente);
+        }
+        catch (ValidationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao cadastrar cliente: {ex.Message}");
+        }
     }
 
-    public async Task<ClienteResponse> Obter(Guid id)
+    public async Task<LoginRecuperado> AutenticarCliente(Login login, TokenService tokenService)
     {
-        var cliente = await repository.Obter(id) ?? throw new NotFoundException("Cliente não encontrado.");
-        return ToResponse(cliente);
+        try
+        {
+            var cliente = await _repository.ObterClientePorLogin(login.EmailOuTelefone)
+                ?? throw new InvalidOperationException("E-mail/telefone ou senha inválidos.");
+
+            if (!cliente.Ativo)
+                throw new InvalidOperationException("Conta desativada.");
+
+            var resultado = _passwordHasher.VerifyHashedPassword(cliente, cliente.SenhaHash, login.Senha);
+
+            if (resultado == PasswordVerificationResult.Failed)
+                throw new InvalidOperationException("E-mail/telefone ou senha inválidos.");
+
+            return tokenService.GerarToken(cliente);
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao autenticar cliente: {ex.Message}");
+        }
     }
 
-    public async Task Atualizar(Guid id, ClienteAtualizacaoRequest request)
+    public async Task<ClienteRecuperado> ObterCliente(Guid clienteId)
     {
-        if (string.IsNullOrWhiteSpace(request.Nome)) AddError(nameof(request.Nome), "Informe o nome.");
-        if (!RuleValidation.TelefoneValido(request.Telefone)) AddError(nameof(request.Telefone), "Informe um telefone válido.");
-        ThrowIfInvalid();
-        if (await repository.Atualizar(id, request) == 0) throw new NotFoundException("Cliente não encontrado.");
+        try
+        {
+            var cliente = await _repository.ObterCliente(clienteId)
+                ?? throw new NotFoundException("Cliente não encontrado para o ID informado.");
+
+            return ConverterCliente(cliente);
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao recuperar cliente por ID: {ex.Message}");
+        }
     }
 
-    public static ClienteResponse ToResponse(Cliente c) => new(c.ClienteId, c.Nome, c.Email, c.Telefone, c.Ativo, c.CriadoEm);
+    public async Task<int> AtualizarCliente(ClienteAtualizado cliente, Guid clienteId)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(cliente.Nome))
+                AddError(nameof(cliente.Nome), "Informe o nome.");
+
+            if (!RuleValidation.TelefoneValido(cliente.Telefone))
+                AddError(nameof(cliente.Telefone), "Informe um telefone válido.");
+
+            if (Errors.Any())
+                throw new ValidationException(Errors);
+
+            var affected = await _repository.AtualizarCliente(cliente, clienteId);
+
+            if (affected <= 0)
+                throw new NotFoundException("Cliente não encontrado para o ID informado.");
+
+            return affected;
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (ValidationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao atualizar cliente: {ex.Message}");
+        }
+    }
+
+    public static ClienteRecuperado ConverterCliente(Cliente cliente)
+    {
+        return new ClienteRecuperado
+        {
+            ClienteId = cliente.ClienteId,
+            Nome = cliente.Nome,
+            Email = cliente.Email,
+            Telefone = cliente.Telefone,
+            Ativo = cliente.Ativo,
+            CriadoEm = cliente.CriadoEm
+        };
+    }
+
+    private async Task ValidarCliente(ClienteCadastro cliente)
+    {
+        if (string.IsNullOrWhiteSpace(cliente.Nome))
+            AddError(nameof(cliente.Nome), "Informe o nome.");
+
+        if (!RuleValidation.EmailValido(cliente.Email))
+            AddError(nameof(cliente.Email), "Informe um e-mail válido.");
+
+        if (!RuleValidation.TelefoneValido(cliente.Telefone))
+            AddError(nameof(cliente.Telefone), "Informe um telefone válido.");
+
+        if (string.IsNullOrWhiteSpace(cliente.Senha) || cliente.Senha.Length < 8)
+            AddError(nameof(cliente.Senha), "A senha deve possuir pelo menos 8 caracteres.");
+
+        if (!Errors.Any() && await _repository.VerificarClienteExiste(cliente.Email, cliente.Telefone))
+            AddError(nameof(cliente.Email), "E-mail ou telefone já cadastrado.");
+
+        if (Errors.Any())
+            throw new ValidationException(Errors);
+    }
 }

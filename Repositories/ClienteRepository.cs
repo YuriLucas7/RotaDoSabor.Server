@@ -1,86 +1,215 @@
 using Npgsql;
-using RotaDoSabor.Server.Models;
+using RotaDoSabor.Models;
 using System.Data;
 
-namespace RotaDoSabor.Server.Repositories;
+namespace RotaDoSabor.Repositories;
 
-public class ClienteRepository : BaseRepository
+public class ClienteRepository
 {
-    public ClienteRepository(IDbConnection connection) : base(connection) { }
+    private readonly NpgsqlConnection _connection;
 
-    public async Task<Guid> Cadastrar(Cliente cliente)
+    public ClienteRepository(IDbConnection connection)
     {
-        const string sql = """
-            INSERT INTO rota_sabor.cliente (nome, email, telefone, senha_hash, ativo)
-            VALUES (@nome, @email, @telefone, @senha_hash, true)
+        _connection = (NpgsqlConnection)connection ?? throw new ArgumentNullException(nameof(connection));
+    }
+
+    public async Task<Guid> CadastrarCliente(Cliente cliente)
+    {
+        const string sql = @"
+            INSERT INTO rota_sabor.cliente
+            (
+                nome,
+                email,
+                telefone,
+                senha_hash,
+                ativo
+            )
+            VALUES
+            (
+                @nome,
+                @email,
+                @telefone,
+                @senha_hash,
+                true
+            )
             RETURNING cliente_id;
-            """;
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("nome", cliente.Nome);
-        cmd.Parameters.AddWithValue("email", cliente.Email);
-        cmd.Parameters.AddWithValue("telefone", cliente.Telefone);
-        cmd.Parameters.AddWithValue("senha_hash", cliente.SenhaHash);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, _connection);
+
+            cmd.Parameters.AddWithValue("nome", cliente.Nome);
+            cmd.Parameters.AddWithValue("email", cliente.Email);
+            cmd.Parameters.AddWithValue("telefone", cliente.Telefone);
+            cmd.Parameters.AddWithValue("senha_hash", cliente.SenhaHash);
+
+            var result = await cmd.ExecuteScalarAsync();
+
+            return (Guid)result!;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<Cliente?> Obter(Guid clienteId)
+    public async Task<Cliente?> ObterCliente(Guid clienteId)
     {
-        const string sql = """
-            SELECT cliente_id, nome, email, telefone, senha_hash, ativo, criado_em
-            FROM rota_sabor.cliente WHERE cliente_id = @id LIMIT 1;
-            """;
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("id", clienteId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? Map(reader) : null;
-    }
-
-    public async Task<Cliente?> ObterPorLogin(string login)
-    {
-        const string sql = """
-            SELECT cliente_id, nome, email, telefone, senha_hash, ativo, criado_em
-            FROM rota_sabor.cliente
-            WHERE lower(email) = lower(@login) OR telefone = @login
+        const string sql = @"
+            SELECT
+                cliente_id,
+                nome,
+                email,
+                telefone,
+                senha_hash,
+                ativo,
+                criado_em
+            FROM
+                rota_sabor.cliente
+            WHERE
+                cliente_id = @cliente_id
             LIMIT 1;
-            """;
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("login", login);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? Map(reader) : null;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, _connection);
+            cmd.Parameters.AddWithValue("cliente_id", clienteId);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync()) return null;
+
+            return Map(reader);
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<bool> EmailOuTelefoneExiste(string email, string telefone)
+    public async Task<Cliente?> ObterClientePorLogin(string login)
     {
-        const string sql = "SELECT 1 FROM rota_sabor.cliente WHERE lower(email)=lower(@email) OR telefone=@telefone LIMIT 1;";
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("email", email);
-        cmd.Parameters.AddWithValue("telefone", telefone);
-        return await cmd.ExecuteScalarAsync() is not null;
+        const string sql = @"
+            SELECT
+                cliente_id,
+                nome,
+                email,
+                telefone,
+                senha_hash,
+                ativo,
+                criado_em
+            FROM
+                rota_sabor.cliente
+            WHERE
+                LOWER(email) = LOWER(@login)
+            OR
+                telefone = @login
+            LIMIT 1;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, _connection);
+            cmd.Parameters.AddWithValue("login", login);
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            if (!await reader.ReadAsync()) return null;
+
+            return Map(reader);
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<int> Atualizar(Guid clienteId, ClienteAtualizacaoRequest request)
+    public async Task<bool> VerificarClienteExiste(string email, string telefone)
     {
-        const string sql = "UPDATE rota_sabor.cliente SET nome=@nome, telefone=@telefone WHERE cliente_id=@id;";
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("id", clienteId);
-        cmd.Parameters.AddWithValue("nome", request.Nome);
-        cmd.Parameters.AddWithValue("telefone", request.Telefone);
-        return await cmd.ExecuteNonQueryAsync();
+        const string sql = @"
+            SELECT
+                1
+            FROM
+                rota_sabor.cliente
+            WHERE
+                LOWER(email) = LOWER(@email)
+            OR
+                telefone = @telefone
+            LIMIT 1;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, _connection);
+            cmd.Parameters.AddWithValue("email", email);
+            cmd.Parameters.AddWithValue("telefone", telefone);
+
+            var result = await cmd.ExecuteScalarAsync();
+
+            return result != null;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    private static Cliente Map(NpgsqlDataReader reader) => new()
+    public async Task<int> AtualizarCliente(ClienteAtualizado cliente, Guid clienteId)
     {
-        ClienteId = reader.GetGuid("cliente_id"),
-        Nome = reader.GetString("nome"),
-        Email = reader.GetString("email"),
-        Telefone = reader.GetString("telefone"),
-        SenhaHash = reader.GetString("senha_hash"),
-        Ativo = reader.GetBoolean("ativo"),
-        CriadoEm = reader.GetDateTime("criado_em")
-    };
+        const string sql = @"
+            UPDATE
+                rota_sabor.cliente
+            SET
+                nome = @nome,
+                telefone = @telefone
+            WHERE
+                cliente_id = @cliente_id;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, _connection);
+
+            cmd.Parameters.AddWithValue("cliente_id", clienteId);
+            cmd.Parameters.AddWithValue("nome", cliente.Nome);
+            cmd.Parameters.AddWithValue("telefone", cliente.Telefone);
+
+            return await cmd.ExecuteNonQueryAsync();
+        }
+        catch
+        {
+            throw;
+        }
+    }
+
+    private static Cliente Map(NpgsqlDataReader reader)
+    {
+        return new Cliente
+        {
+            ClienteId = reader.GetGuid("cliente_id"),
+            Nome = reader.GetString("nome"),
+            Email = reader.GetString("email"),
+            Telefone = reader.GetString("telefone"),
+            SenhaHash = reader.GetString("senha_hash"),
+            Ativo = reader.GetBoolean("ativo"),
+            CriadoEm = reader.GetDateTime("criado_em")
+        };
+    }
+
+    private async Task EnsureOpenAsync()
+    {
+        if (_connection.State != ConnectionState.Open) await _connection.OpenAsync();
+    }
 }

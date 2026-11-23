@@ -1,81 +1,201 @@
 using Npgsql;
-using RotaDoSabor.Server.Models;
+using RotaDoSabor.Models;
 using System.Data;
 
-namespace RotaDoSabor.Server.Repositories;
+namespace RotaDoSabor.Repositories;
 
-public class ProdutoRepository : BaseRepository
+public class ProdutoRepository
 {
-    public ProdutoRepository(IDbConnection connection) : base(connection) { }
+    private readonly NpgsqlConnection _connection;
 
-    public async Task<Guid> Cadastrar(Guid restauranteId, ProdutoRequest r)
+    public ProdutoRepository(IDbConnection connection)
     {
-        const string sql = """
+        _connection = (NpgsqlConnection)connection ?? throw new ArgumentNullException(nameof(connection));
+    }
+
+    public async Task<Guid> CadastrarProduto(Produto produto)
+    {
+        const string sql = @"
             INSERT INTO rota_sabor.produto
-            (restaurante_id,nome,descricao,categoria,imagem_url,preco,preco_promocional,disponivel,ordem)
-            VALUES (@restaurante_id,@nome,@descricao,@categoria,@imagem_url,@preco,@preco_promocional,@disponivel,@ordem)
+            (
+                restaurante_id,
+                nome,
+                descricao,
+                categoria,
+                imagem_url,
+                preco,
+                preco_promocional,
+                disponivel,
+                ordem
+            )
+            VALUES
+            (
+                @restaurante_id,
+                @nome,
+                @descricao,
+                @categoria,
+                @imagem_url,
+                @preco,
+                @preco_promocional,
+                @disponivel,
+                @ordem
+            )
             RETURNING produto_id;
-            """;
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        AddParameters(cmd, restauranteId, r);
-        return (Guid)(await cmd.ExecuteScalarAsync())!;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            AdicionarParametros(command, produto);
+
+            return (Guid)(await command.ExecuteScalarAsync())!;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<List<Produto>> ObterPorRestaurante(Guid restauranteId, bool somenteDisponiveis)
+    public async Task<List<Produto>> ObterProdutosPorRestaurante(Guid restauranteId, bool somenteDisponiveis)
     {
-        const string sql = """
-            SELECT * FROM rota_sabor.produto
-            WHERE restaurante_id=@restaurante_id AND (@somente=false OR disponivel=true)
-            ORDER BY categoria, ordem, nome;
-            """;
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        cmd.Parameters.AddWithValue("restaurante_id", restauranteId);
-        cmd.Parameters.AddWithValue("somente", somenteDisponiveis);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        var result = new List<Produto>();
-        while (await reader.ReadAsync()) result.Add(Map(reader));
-        return result;
+        const string sql = @"
+            SELECT produto_id,
+                   restaurante_id,
+                   nome,
+                   descricao,
+                   categoria,
+                   imagem_url,
+                   preco,
+                   preco_promocional,
+                   disponivel,
+                   ordem
+              FROM rota_sabor.produto
+             WHERE restaurante_id = @restaurante_id
+               AND (@somente_disponiveis = false OR disponivel = true)
+             ORDER BY categoria,
+                      ordem,
+                      nome;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            command.Parameters.AddWithValue("restaurante_id", restauranteId);
+            command.Parameters.AddWithValue("somente_disponiveis", somenteDisponiveis);
+            await using var reader = await command.ExecuteReaderAsync();
+            var produtos = new List<Produto>();
+
+            while (await reader.ReadAsync())
+                produtos.Add(MapearProduto(reader));
+
+            return produtos;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<Produto?> Obter(Guid produtoId)
+    public async Task<Produto?> ObterProduto(Guid produtoId)
     {
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand("SELECT * FROM rota_sabor.produto WHERE produto_id=@id LIMIT 1", Connection);
-        cmd.Parameters.AddWithValue("id", produtoId);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        return await reader.ReadAsync() ? Map(reader) : null;
+        const string sql = @"
+            SELECT produto_id,
+                   restaurante_id,
+                   nome,
+                   descricao,
+                   categoria,
+                   imagem_url,
+                   preco,
+                   preco_promocional,
+                   disponivel,
+                   ordem
+              FROM rota_sabor.produto
+             WHERE produto_id = @produto_id
+             LIMIT 1;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            command.Parameters.AddWithValue("produto_id", produtoId);
+            await using var reader = await command.ExecuteReaderAsync();
+
+            return await reader.ReadAsync() ? MapearProduto(reader) : null;
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    public async Task<int> Atualizar(Guid produtoId, ProdutoRequest r)
+    public async Task<int> AtualizarProduto(Produto produto, Guid produtoId)
     {
-        const string sql = """
-            UPDATE rota_sabor.produto SET nome=@nome,descricao=@descricao,categoria=@categoria,imagem_url=@imagem_url,
-            preco=@preco,preco_promocional=@preco_promocional,disponivel=@disponivel,ordem=@ordem WHERE produto_id=@produto_id;
-            """;
-        await EnsureOpenAsync();
-        await using var cmd = new NpgsqlCommand(sql, Connection);
-        AddParameters(cmd, Guid.Empty, r);
-        cmd.Parameters.RemoveAt("restaurante_id");
-        cmd.Parameters.AddWithValue("produto_id", produtoId);
-        return await cmd.ExecuteNonQueryAsync();
+        const string sql = @"
+            UPDATE rota_sabor.produto
+               SET nome = @nome,
+                   descricao = @descricao,
+                   categoria = @categoria,
+                   imagem_url = @imagem_url,
+                   preco = @preco,
+                   preco_promocional = @preco_promocional,
+                   disponivel = @disponivel,
+                   ordem = @ordem
+             WHERE produto_id = @produto_id;
+        ";
+
+        try
+        {
+            await EnsureOpenAsync();
+            await using var command = new NpgsqlCommand(sql, _connection);
+            AdicionarParametros(command, produto, false);
+            command.Parameters.AddWithValue("produto_id", produtoId);
+
+            return await command.ExecuteNonQueryAsync();
+        }
+        catch
+        {
+            throw;
+        }
     }
 
-    private static void AddParameters(NpgsqlCommand cmd, Guid restauranteId, ProdutoRequest r)
+    private static void AdicionarParametros(NpgsqlCommand command, Produto produto, bool incluirRestaurante = true)
     {
-        cmd.Parameters.AddWithValue("restaurante_id", restauranteId); cmd.Parameters.AddWithValue("nome", r.Nome);
-        cmd.Parameters.AddWithValue("descricao", r.Descricao); cmd.Parameters.AddWithValue("categoria", r.Categoria);
-        cmd.Parameters.AddWithValue("imagem_url", r.ImagemUrl ?? string.Empty); cmd.Parameters.AddWithValue("preco", r.Preco);
-        cmd.Parameters.AddWithValue("preco_promocional", (object?)r.PrecoPromocional ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("disponivel", r.Disponivel); cmd.Parameters.AddWithValue("ordem", r.Ordem);
+        if (incluirRestaurante)
+            command.Parameters.AddWithValue("restaurante_id", produto.RestauranteId);
+
+        command.Parameters.AddWithValue("nome", produto.Nome);
+        command.Parameters.AddWithValue("descricao", produto.Descricao);
+        command.Parameters.AddWithValue("categoria", produto.Categoria);
+        command.Parameters.AddWithValue("imagem_url", produto.ImagemUrl);
+        command.Parameters.AddWithValue("preco", produto.Preco);
+        command.Parameters.AddWithValue("preco_promocional", (object?)produto.PrecoPromocional ?? DBNull.Value);
+        command.Parameters.AddWithValue("disponivel", produto.Disponivel);
+        command.Parameters.AddWithValue("ordem", produto.Ordem);
     }
 
-    private static Produto Map(NpgsqlDataReader r) => new()
+    private static Produto MapearProduto(NpgsqlDataReader reader)
     {
-        ProdutoId=r.GetGuid("produto_id"), RestauranteId=r.GetGuid("restaurante_id"), Nome=r.GetString("nome"),
-        Descricao=r.GetSafeString("descricao"), Categoria=r.GetString("categoria"), ImagemUrl=r.GetSafeString("imagem_url"),
-        Preco=r.GetDecimal("preco"), PrecoPromocional=r.GetNullableDecimal("preco_promocional"),
-        Disponivel=r.GetBoolean("disponivel"), Ordem=r.GetInt32("ordem")
-    };
+        return new Produto
+        {
+            ProdutoId = reader.GetGuid("produto_id"),
+            RestauranteId = reader.GetGuid("restaurante_id"),
+            Nome = reader.GetString("nome"),
+            Descricao = reader.GetSafeString("descricao"),
+            Categoria = reader.GetString("categoria"),
+            ImagemUrl = reader.GetSafeString("imagem_url"),
+            Preco = reader.GetDecimal("preco"),
+            PrecoPromocional = reader.GetNullableDecimal("preco_promocional"),
+            Disponivel = reader.GetBoolean("disponivel"),
+            Ordem = reader.GetInt32("ordem")
+        };
+    }
+
+    private async Task EnsureOpenAsync()
+    {
+        if (_connection.State != ConnectionState.Open)
+            await _connection.OpenAsync();
+    }
 }

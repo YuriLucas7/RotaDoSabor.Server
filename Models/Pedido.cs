@@ -1,4 +1,4 @@
-namespace RotaDoSabor.Server.Models;
+namespace RotaDoSabor.Models;
 
 public class Pedido
 {
@@ -58,14 +58,33 @@ public class Entrega
     public DateTime? EntregueEm { get; set; }
 }
 
-public record PedidoItemRequest(Guid ProdutoId, int Quantidade, string? Observacao);
-public record PedidoRequest(
-    Guid ClienteId,
-    Guid RestauranteId,
-    Guid? EnderecoId,
-    TipoRecebimento TipoRecebimento,
-    FormaPagamento FormaPagamento,
-    string? Observacao,
-    List<PedidoItemRequest> Itens);
-public record AtualizarStatusPedidoRequest(StatusPedido Status, string? Motivo);
-public record AtualizarEntregaRequest(StatusEntrega Status, decimal? Latitude, decimal? Longitude);
+public class PedidoCadastro
+{
+    public Guid ClienteId { get; set; }
+    public Guid RestauranteId { get; set; }
+    public Guid? EnderecoId { get; set; }
+    public TipoRecebimento TipoRecebimento { get; set; }
+    public FormaPagamento FormaPagamento { get; set; }
+    public string Observacao { get; set; } = string.Empty;
+    public List<PedidoItemCadastro> Itens { get; set; } = [];
+}
+
+public class PedidoItemCadastro
+{
+    public Guid ProdutoId { get; set; }
+    public int Quantidade { get; set; }
+    public string Observacao { get; set; } = string.Empty;
+}
+
+public class StatusPedidoAtualizado
+{
+    public StatusPedido Status { get; set; }
+    public string Motivo { get; set; } = string.Empty;
+}
+
+public class EntregaAtualizada
+{
+    public StatusEntrega Status { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+}

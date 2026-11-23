@@ -1,43 +1,64 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class PedidoController
 {
     public static void MapPedidoEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("v1/pedidos").WithTags("pedidos");
-
-        group.MapPost("/", async (PedidoRequest request, PedidoService service) =>
+        app.MapPost("v1/pedidos", async (PedidoCadastro pedido, PedidoService service) =>
         {
-            var id = await service.Cadastrar(request);
-            return Results.Created($"/v1/pedidos/{id}", new { pedidoId = id });
-        }).WithSummary("Cria e calcula um pedido");
+            Guid pedidoId = await service.CadastrarPedido(pedido);
+            return Results.Created($"/v1/pedidos/{pedidoId}", "Pedido cadastrado com sucesso.");
+        })
+        .WithTags("pedidos")
+        .WithSummary("Registra um pedido")
+        .Produces(StatusCodes.Status201Created);
 
-        group.MapGet("/{pedidoId:guid}", async (Guid pedidoId, PedidoService service) => Results.Ok(await service.Obter(pedidoId)))
-            .WithSummary("Retorna pedido, itens, pagamento e entrega").Produces<Pedido>();
+        app.MapGet("v1/pedidos/{pedidoId:guid}", async (Guid pedidoId, PedidoService service) =>
+        {
+            var result = await service.ObterPedido(pedidoId);
+            return Results.Ok(result);
+        })
+        .WithTags("pedidos")
+        .WithSummary("Retorna um pedido por ID")
+        .Produces<Pedido>(StatusCodes.Status200OK);
 
         app.MapGet("v1/clientes/{clienteId:guid}/pedidos", async (Guid clienteId, PedidoService service) =>
-            Results.Ok(await service.ObterPorCliente(clienteId)))
-            .WithTags("pedidos").WithSummary("Lista os pedidos do cliente").Produces<List<Pedido>>();
-
-        group.MapPatch("/{pedidoId:guid}/status", async (Guid pedidoId, AtualizarStatusPedidoRequest request, PedidoService service) =>
         {
-            await service.AtualizarStatus(pedidoId, request);
-            return Results.NoContent();
-        }).WithSummary("Atualiza o estado do pedido");
+            var result = await service.ObterPedidosPorCliente(clienteId);
+            return Results.Ok(result);
+        })
+        .WithTags("pedidos")
+        .WithSummary("Retorna os pedidos do cliente")
+        .Produces<List<Pedido>>(StatusCodes.Status200OK);
 
-        group.MapPatch("/{pedidoId:guid}/pagamento", async (Guid pedidoId, StatusPagamento status, string? transacaoId, PedidoService service) =>
+        app.MapPatch("v1/pedidos/{pedidoId:guid}/status", async (Guid pedidoId, StatusPedidoAtualizado status, PedidoService service) =>
+        {
+            await service.AtualizarStatusPedido(pedidoId, status);
+            return Results.Ok("Status do pedido atualizado com sucesso.");
+        })
+        .WithTags("pedidos")
+        .WithSummary("Atualiza o status do pedido")
+        .Produces(StatusCodes.Status200OK);
+
+        app.MapPatch("v1/pedidos/{pedidoId:guid}/pagamento", async (Guid pedidoId, StatusPagamento status, string? transacaoId, PedidoService service) =>
         {
             await service.AtualizarPagamento(pedidoId, status, transacaoId);
-            return Results.NoContent();
-        }).WithSummary("Registra o resultado do pagamento");
+            return Results.Ok("Pagamento atualizado com sucesso.");
+        })
+        .WithTags("pedidos")
+        .WithSummary("Atualiza o pagamento do pedido")
+        .Produces(StatusCodes.Status200OK);
 
-        group.MapPatch("/{pedidoId:guid}/entrega", async (Guid pedidoId, AtualizarEntregaRequest request, PedidoService service) =>
+        app.MapPatch("v1/pedidos/{pedidoId:guid}/entrega", async (Guid pedidoId, EntregaAtualizada entrega, PedidoService service) =>
         {
-            await service.AtualizarEntrega(pedidoId, request);
-            return Results.NoContent();
-        }).WithSummary("Atualiza o rastreamento e o estado da entrega");
+            await service.AtualizarEntrega(pedidoId, entrega);
+            return Results.Ok("Entrega atualizada com sucesso.");
+        })
+        .WithTags("pedidos")
+        .WithSummary("Atualiza a entrega do pedido")
+        .Produces(StatusCodes.Status200OK);
     }
 }

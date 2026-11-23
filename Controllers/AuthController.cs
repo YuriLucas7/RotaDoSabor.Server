@@ -1,28 +1,37 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
 using RotaDoSabor.Server.Validations;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class AuthController
 {
     public static void MapAuthEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("v1/auth").WithTags("autenticação");
-
-        group.MapPost("/cadastro", async (ClienteCadastroRequest request, ClienteService service) =>
+        app.MapPost("v1/auth/cadastro", async (ClienteCadastro cliente, ClienteService service) =>
         {
-            var id = await service.Cadastrar(request);
-            return Results.Created($"/v1/clientes/{id}", new { clienteId = id });
-        })
-        .WithSummary("Cadastra um novo cliente")
-        .Produces(StatusCodes.Status201Created)
-        .Produces<List<ValidationError>>(StatusCodes.Status400BadRequest);
+            Guid clienteId = await service.CadastrarCliente(cliente);
 
-        group.MapPost("/login", async (LoginRequest request, ClienteService service, TokenService tokenService) =>
-            Results.Ok(await service.Login(request, tokenService)))
-        .WithSummary("Autentica o cliente")
-        .Produces<LoginResponse>()
-        .Produces<string>(StatusCodes.Status400BadRequest);
+            return Results.Created($"/v1/clientes/{clienteId}", "Cliente cadastrado com sucesso.");
+        })
+        .WithTags("autenticação")
+        .WithSummary("Registra um novo cliente")
+        .WithDescription("Registra um novo cliente com telefone, e-mail e senha.")
+        .Produces(StatusCodes.Status201Created)
+        .Produces<List<ValidationError>>(StatusCodes.Status400BadRequest)
+        .Produces<string>(StatusCodes.Status500InternalServerError);
+
+        app.MapPost("v1/auth/login", async (Login login, ClienteService service, TokenService tokenService) =>
+        {
+            var result = await service.AutenticarCliente(login, tokenService);
+
+            return Results.Ok(result);
+        })
+        .WithTags("autenticação")
+        .WithSummary("Autentica um cliente")
+        .WithDescription("Autentica por telefone ou e-mail e retorna o token JWT.")
+        .Produces<LoginRecuperado>(StatusCodes.Status200OK)
+        .Produces<string>(StatusCodes.Status400BadRequest)
+        .Produces<string>(StatusCodes.Status500InternalServerError);
     }
 }

@@ -1,4 +1,4 @@
-namespace RotaDoSabor.Server.Models;
+namespace RotaDoSabor.Models;
 
 public class Endereco
 {
@@ -17,15 +17,3 @@ public class Endereco
     public bool Principal { get; set; }
 }
 
-public record EnderecoRequest(
-    string Apelido,
-    string Cep,
-    string Logradouro,
-    string Numero,
-    string? Complemento,
-    string Bairro,
-    string Cidade,
-    string Estado,
-    decimal? Latitude,
-    decimal? Longitude,
-    bool Principal);

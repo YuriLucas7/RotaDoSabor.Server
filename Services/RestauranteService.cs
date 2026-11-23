@@ -1,29 +1,96 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Repositories;
+using RotaDoSabor.Models;
+using RotaDoSabor.Repositories;
+using RotaDoSabor.Server.Services;
 using RotaDoSabor.Server.Validations;
 
-namespace RotaDoSabor.Server.Services;
+namespace RotaDoSabor.Services;
 
-public class RestauranteService(RestauranteRepository repository) : BaseService
+public class RestauranteService : BaseService
 {
-    public async Task<Guid> Cadastrar(RestauranteRequest request)
+    private readonly RestauranteRepository _repository;
+
+    public RestauranteService(RestauranteRepository repository)
     {
-        if (string.IsNullOrWhiteSpace(request.Nome)) AddError(nameof(request.Nome), "Informe o nome.");
-        if (!RuleValidation.CnpjValido(request.Cnpj)) AddError(nameof(request.Cnpj), "Informe um CNPJ válido.");
-        if (!RuleValidation.EmailValido(request.Email)) AddError(nameof(request.Email), "Informe um e-mail válido.");
-        if (!RuleValidation.TelefoneValido(request.Telefone)) AddError(nameof(request.Telefone), "Informe um telefone válido.");
-        if (request.PedidoMinimo < 0) AddError(nameof(request.PedidoMinimo), "O pedido mínimo não pode ser negativo.");
-        if (!Errors.Any() && await repository.CnpjExiste(request.Cnpj)) AddError(nameof(request.Cnpj), "CNPJ já cadastrado.");
-        ThrowIfInvalid();
-        return await repository.Cadastrar(request);
+        _repository = repository;
     }
 
-    public Task<List<Restaurante>> ObterTodos(string? busca, bool? aberto, bool? ofertas) => repository.ObterTodos(busca, aberto, ofertas);
-
-    public async Task<Restaurante> Obter(Guid id) => await repository.Obter(id) ?? throw new NotFoundException("Restaurante não encontrado.");
-
-    public async Task AtualizarStatus(Guid id, StatusRestaurante status, bool aberto)
+    public async Task<Guid> CadastrarRestaurante(Restaurante restaurante)
     {
-        if (await repository.AtualizarStatus(id, status, aberto) == 0) throw new NotFoundException("Restaurante não encontrado.");
+        try
+        {
+            await ValidarRestaurante(restaurante);
+            return await _repository.CadastrarRestaurante(restaurante);
+        }
+        catch (ValidationException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao cadastrar restaurante: {ex.Message}");
+        }
+    }
+
+    public async Task<List<Restaurante>> ObterRestaurantes(string? busca, bool? aberto, bool? ofertas)
+    {
+        try
+        {
+            return await _repository.ObterRestaurantes(busca, aberto, ofertas);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao recuperar restaurantes: {ex.Message}");
+        }
+    }
+
+    public async Task<Restaurante> ObterRestaurante(Guid restauranteId)
+    {
+        try
+        {
+            return await _repository.ObterRestaurante(restauranteId)
+                ?? throw new NotFoundException("Restaurante não encontrado para o ID informado.");
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao recuperar restaurante por ID: {ex.Message}");
+        }
+    }
+
+    public async Task<int> AtualizarStatusRestaurante(Guid restauranteId, StatusRestaurante status, bool aberto)
+    {
+        try
+        {
+            var affected = await _repository.AtualizarStatusRestaurante(restauranteId, status, aberto);
+
+            if (affected <= 0)
+                throw new NotFoundException("Restaurante não encontrado para o ID informado.");
+
+            return affected;
+        }
+        catch (NotFoundException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Erro ao atualizar restaurante: {ex.Message}");
+        }
+    }
+
+    private async Task ValidarRestaurante(Restaurante restaurante)
+    {
+        if (string.IsNullOrWhiteSpace(restaurante.Nome)) AddError(nameof(restaurante.Nome), "Informe o nome.");
+        if (!RuleValidation.CnpjValido(restaurante.Cnpj)) AddError(nameof(restaurante.Cnpj), "Informe um CNPJ válido.");
+        if (!RuleValidation.EmailValido(restaurante.Email)) AddError(nameof(restaurante.Email), "Informe um e-mail válido.");
+        if (!RuleValidation.TelefoneValido(restaurante.Telefone)) AddError(nameof(restaurante.Telefone), "Informe um telefone válido.");
+        if (restaurante.PedidoMinimo < 0) AddError(nameof(restaurante.PedidoMinimo), "O pedido mínimo não pode ser negativo.");
+        if (!Errors.Any() && await _repository.VerificarRestauranteExiste(restaurante.Cnpj)) AddError(nameof(restaurante.Cnpj), "CNPJ já cadastrado.");
+
+        if (Errors.Any())
+            throw new ValidationException(Errors);
     }
 }

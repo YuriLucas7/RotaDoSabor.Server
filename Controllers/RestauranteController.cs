@@ -1,32 +1,46 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class RestauranteController
 {
     public static void MapRestauranteEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("v1/restaurantes").WithTags("restaurantes");
-
-        group.MapPost("/", async (RestauranteRequest request, RestauranteService service) =>
+        app.MapPost("v1/restaurantes", async (Restaurante restaurante, RestauranteService service) =>
         {
-            var id = await service.Cadastrar(request);
-            return Results.Created($"/v1/restaurantes/{id}", new { restauranteId = id });
-        }).WithSummary("Cadastra um restaurante");
+            Guid restauranteId = await service.CadastrarRestaurante(restaurante);
+            return Results.Created($"/v1/restaurantes/{restauranteId}", "Restaurante cadastrado com sucesso.");
+        })
+        .WithTags("restaurantes")
+        .WithSummary("Registra um restaurante")
+        .Produces(StatusCodes.Status201Created);
 
-        group.MapGet("/", async (string? busca, bool? aberto, bool? ofertas, RestauranteService service) =>
-            Results.Ok(await service.ObterTodos(busca, aberto, ofertas)))
-            .WithSummary("Pesquisa restaurantes e ofertas").Produces<List<Restaurante>>();
-
-        group.MapGet("/{restauranteId:guid}", async (Guid restauranteId, RestauranteService service) =>
-            Results.Ok(await service.Obter(restauranteId)))
-            .WithSummary("Retorna um restaurante").Produces<Restaurante>();
-
-        group.MapPatch("/{restauranteId:guid}/status", async (Guid restauranteId, StatusRestaurante status, bool aberto, RestauranteService service) =>
+        app.MapGet("v1/restaurantes", async (string? busca, bool? aberto, bool? ofertas, RestauranteService service) =>
         {
-            await service.AtualizarStatus(restauranteId, status, aberto);
-            return Results.NoContent();
-        }).WithSummary("Atualiza situação e disponibilidade do restaurante");
+            var result = await service.ObterRestaurantes(busca, aberto, ofertas);
+            return Results.Ok(result);
+        })
+        .WithTags("restaurantes")
+        .WithSummary("Retorna restaurantes e ofertas")
+        .Produces<List<Restaurante>>(StatusCodes.Status200OK);
+
+        app.MapGet("v1/restaurantes/{restauranteId:guid}", async (Guid restauranteId, RestauranteService service) =>
+        {
+            var result = await service.ObterRestaurante(restauranteId);
+            return Results.Ok(result);
+        })
+        .WithTags("restaurantes")
+        .WithSummary("Retorna um restaurante por ID")
+        .Produces<Restaurante>(StatusCodes.Status200OK);
+
+        app.MapPatch("v1/restaurantes/{restauranteId:guid}/status", async (Guid restauranteId, StatusRestaurante status, bool aberto, RestauranteService service) =>
+        {
+            await service.AtualizarStatusRestaurante(restauranteId, status, aberto);
+            return Results.Ok("Status do restaurante atualizado com sucesso.");
+        })
+        .WithTags("restaurantes")
+        .WithSummary("Atualiza o status do restaurante")
+        .Produces(StatusCodes.Status200OK);
     }
 }

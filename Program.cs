@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
-using RotaDoSabor.Server.Controllers;
-using RotaDoSabor.Server.Repositories;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Controllers;
+using RotaDoSabor.Repositories;
+using RotaDoSabor.Services;
 using RotaDoSabor.Server.Validations;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -17,9 +17,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Configuração da conexão com o banco de dados
 builder.Services.AddScoped<System.Data.IDbConnection>(_ =>
     new Npgsql.NpgsqlConnection(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Registro dos repositórios
 builder.Services.AddScoped<ClienteRepository>();
 builder.Services.AddScoped<EnderecoRepository>();
 builder.Services.AddScoped<RestauranteRepository>();
@@ -27,6 +29,7 @@ builder.Services.AddScoped<ProdutoRepository>();
 builder.Services.AddScoped<PedidoRepository>();
 builder.Services.AddScoped<AvaliacaoRepository>();
 
+// Registro dos serviços
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ClienteService>();
 builder.Services.AddScoped<EnderecoService>();

@@ -1,21 +1,30 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class ClienteController
 {
     public static void MapClienteEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("v1/clientes").WithTags("clientes");
-
-        group.MapGet("/{clienteId:guid}", async (Guid clienteId, ClienteService service) => Results.Ok(await service.Obter(clienteId)))
-            .WithSummary("Retorna os dados do cliente").Produces<ClienteResponse>();
-
-        group.MapPut("/{clienteId:guid}", async (Guid clienteId, ClienteAtualizacaoRequest request, ClienteService service) =>
+        app.MapGet("v1/clientes/{clienteId:guid}", async (Guid clienteId, ClienteService service) =>
         {
-            await service.Atualizar(clienteId, request);
-            return Results.NoContent();
-        }).WithSummary("Atualiza os dados do cliente").Produces(StatusCodes.Status204NoContent);
+            var result = await service.ObterCliente(clienteId);
+            return Results.Ok(result);
+        })
+        .WithTags("clientes")
+        .WithSummary("Retorna um cliente por ID")
+        .Produces<ClienteRecuperado>(StatusCodes.Status200OK)
+        .Produces<string>(StatusCodes.Status404NotFound);
+
+        app.MapPut("v1/clientes/{clienteId:guid}", async (Guid clienteId, ClienteAtualizado cliente, ClienteService service) =>
+        {
+            await service.AtualizarCliente(cliente, clienteId);
+            return Results.Ok("Cliente atualizado com sucesso.");
+        })
+        .WithTags("clientes")
+        .WithSummary("Atualiza um cliente")
+        .Produces(StatusCodes.Status200OK)
+        .Produces<string>(StatusCodes.Status404NotFound);
     }
 }

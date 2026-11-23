@@ -2,14 +2,19 @@ using RotaDoSabor.Server.Validations;
 
 namespace RotaDoSabor.Server.Services;
 
-public abstract class BaseService
+public class BaseService
 {
-    private readonly List<ValidationError> _errors = [];
-    protected IReadOnlyList<ValidationError> Errors => _errors;
+    private readonly List<ValidationError> _errors = new();
 
-    protected void AddError(string field, string message) => _errors.Add(new ValidationError(field, message));
+    public List<ValidationError> Errors { get => _errors; }
+
+    protected void AddError(string field, string message)
+    {
+        _errors.Add(new ValidationError(field, message));
+    }
+
     protected void ThrowIfInvalid()
     {
-        if (_errors.Count > 0) throw new ValidationException(_errors.ToList());
+        if (_errors.Count > 0) throw new ValidationException(_errors);
     }
 }

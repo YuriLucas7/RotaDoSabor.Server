@@ -1,4 +1,4 @@
-namespace RotaDoSabor.Server.Models;
+namespace RotaDoSabor.Models;
 
 public class Avaliacao
 {
@@ -13,4 +13,3 @@ public class Avaliacao
     public DateTime CriadoEm { get; set; }
 }
 
-public record AvaliacaoRequest(int NotaRestaurante, int NotaEntrega, int NotaComida, string? Comentario);

@@ -1,27 +1,37 @@
-using RotaDoSabor.Server.Models;
-using RotaDoSabor.Server.Services;
+using RotaDoSabor.Models;
+using RotaDoSabor.Services;
 
-namespace RotaDoSabor.Server.Controllers;
+namespace RotaDoSabor.Controllers;
 
 public static class EnderecoController
 {
     public static void MapEnderecoEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("v1/clientes/{clienteId:guid}/enderecos").WithTags("endereços");
-
-        group.MapPost("/", async (Guid clienteId, EnderecoRequest request, EnderecoService service) =>
+        app.MapPost("v1/clientes/{clienteId:guid}/enderecos", async (Guid clienteId, Endereco endereco, EnderecoService service) =>
         {
-            var id = await service.Cadastrar(clienteId, request);
-            return Results.Created($"/v1/clientes/{clienteId}/enderecos/{id}", new { enderecoId = id });
-        }).WithSummary("Cadastra um endereço");
+            Guid enderecoId = await service.CadastrarEndereco(endereco, clienteId);
+            return Results.Created($"/v1/clientes/{clienteId}/enderecos/{enderecoId}", "Endereço cadastrado com sucesso.");
+        })
+        .WithTags("endereços")
+        .WithSummary("Registra um endereço")
+        .Produces(StatusCodes.Status201Created);
 
-        group.MapGet("/", async (Guid clienteId, EnderecoService service) => Results.Ok(await service.ObterPorCliente(clienteId)))
-            .WithSummary("Lista os endereços do cliente").Produces<List<Endereco>>();
-
-        group.MapDelete("/{enderecoId:guid}", async (Guid enderecoId, EnderecoService service) =>
+        app.MapGet("v1/clientes/{clienteId:guid}/enderecos", async (Guid clienteId, EnderecoService service) =>
         {
-            await service.Excluir(enderecoId);
-            return Results.NoContent();
-        }).WithSummary("Exclui um endereço");
+            var result = await service.ObterEnderecosPorCliente(clienteId);
+            return Results.Ok(result);
+        })
+        .WithTags("endereços")
+        .WithSummary("Retorna os endereços do cliente")
+        .Produces<List<Endereco>>(StatusCodes.Status200OK);
+
+        app.MapDelete("v1/enderecos/{enderecoId:guid}", async (Guid enderecoId, EnderecoService service) =>
+        {
+            await service.ExcluirEndereco(enderecoId);
+            return Results.Ok("Endereço excluído com sucesso.");
+        })
+        .WithTags("endereços")
+        .WithSummary("Exclui um endereço")
+        .Produces(StatusCodes.Status200OK);
     }
 }

@@ -1,4 +1,4 @@
-namespace RotaDoSabor.Server.Models;
+namespace RotaDoSabor.Models;
 
 public class Produto
 {
@@ -14,12 +14,3 @@ public class Produto
     public int Ordem { get; set; }
 }
 
-public record ProdutoRequest(
-    string Nome,
-    string Descricao,
-    string Categoria,
-    string? ImagemUrl,
-    decimal Preco,
-    decimal? PrecoPromocional,
-    bool Disponivel,
-    int Ordem);
